@@ -32,6 +32,8 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
 
 - **REST API Support**:
   - This image includes the REST API on port 8081, which is not available in `openthread/border-router`.
+- **"Date" release tags**:
+  - Easily roll back with `:vYYYY.MM.DD` image tags.
 - **Enhanced Configuration**:
   - Provides user-friendly environment variables and flow control options, making setup and customization easier compared to `openthread/border-router`.
 - **Coming Soon**:
