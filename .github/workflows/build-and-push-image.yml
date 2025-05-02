@@ -1,4 +1,4 @@
-name: Build and Push Multiarch Image to GHCR
+name: Build and Push OTBR Image to GHCR
 
 on:
   release:
@@ -9,7 +9,7 @@ env:
   IMAGE_NAME: otbr-docker
 
 jobs:
-  build-and-push:
+  build-and-push-image:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,7 +44,7 @@ jobs:
           echo "MANIFEST_TAG=$MANIFEST_TAG" >> $GITHUB_OUTPUT
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_OUTPUT
 
-      - name: Build and push multiarch image
+      - name: Build and push otbr image
         uses: docker/build-push-action@v5
         with:
           context: .
