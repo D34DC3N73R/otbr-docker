@@ -8,20 +8,22 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
   - Image size is approximately 110 MB, making it efficient for deployment on resource-constrained devices. 
   
 - **REST API Enabled**:
-  - Includes the REST API on port 8081 for integration (`openthread/border-router` does not).
+  - Includes the REST API with a user-defined port.
 
 - **Web UI Disabled**:
-  - Removed to reduce image size, matching `openthread/border-router`.
+  - Removed to reduce image size.
 
 - **Multiarch**:
   - Built for `amd64` and `arm64` architectures.
 
 - **Convenient Environment Variables**:
+  - `NETWORK_DEVICE`: Not tested
   - `DEVICE`: Serial device (e.g., `/dev/ttyUSB0`).
   - `BAUDRATE`: Serial baud rate (e.g., `460800`).
   - `FLOW_CONTROL`: Hardware flow control (e.g., `1` for enabled, `0` for disabled).
   - `BACKBONE_NET`: Infrastructure interface (e.g., `eth0`).
   - `THREAD_NET`: Thread interface (e.g., `wpan0`).
+  - `REST_API_PORT`: User-defined REST API port (default `8081`)
   - `LOG_LEVEL`: OTBR log level (emergency=`0` alert=`1` critical=`2` error=`3` warning=`4` notice=`5` info=`6` debug=`7`). 
 
 - **Firewall and NAT64 Enabled**:
@@ -30,16 +32,16 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
 ## Differences from `openthread/border-router`
 
 - **REST API Support**:
-  - This image includes the REST API on port 8081, which is not available in `openthread/border-router`.
+  - This image includes the REST API on a user-defined port.
 - **Healthcheck**:
   - Integrated container health check.
 - **"Date" release tags**:
   - Easily roll back with `:vYYYY.MM.DD` image tags.
 - **Enhanced Configuration**:
-  - Provides user-friendly environment variables and flow control options, making setup and customization easier compared to `openthread/border-router`.
+  - Provides user-friendly environment variables and flow control options.
 - **Coming Soon**:
-  - Environment variables to enable/disable the Firewall and NAT64. Both are currently enabled in this image.
-  - Look into the possibility of a user-defined REST API port.
+  - ✅ ~User-defined REST API port.~
+  - Environment variables to enable/disable the Firewall and NAT64. Both are currently enabled.
 
 ## Docker Compose
 ```
@@ -63,6 +65,7 @@ services:
       - FLOW_CONTROL=1 #Hardware Flow Control
       - BACKBONE_NET=eth0 #Main Network Interface
       - THREAD_NET=wpan0 #Thread Network Interface
+      - REST_API_PORT=8081 # User Defined REST API PORT
       - LOG_LEVEL=3
     devices:
       - /dev/ttyUSB0
