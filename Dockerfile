@@ -139,6 +139,7 @@ ENV FLOW_CONTROL=1
 ENV BACKBONE_NET=eth0
 ENV THREAD_NET=wpan0
 ENV LOG_LEVEL=3
+ENV REST_API_PORT=8081
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -202,6 +203,7 @@ RUN sed -n '/^#!/,/^echo "Starting otbr-agent..."/p' /etc/s6-overlay/s6-rc.d/otb
     echo 'INFRA_IF=${BACKBONE_NET:-${OT_INFRA_IF:-eth0}}' >> /tmp/run_tmp && \
     echo 'THREAD_IF=${THREAD_NET:-${OT_THREAD_IF:-wpan0}}' >> /tmp/run_tmp && \
     echo 'LOG_LEVEL_LOCAL=${LOG_LEVEL:-${OT_LOG_LEVEL:-3}}' >> /tmp/run_tmp && \
+    echo 'REST_API_PORT_LOCAL=${REST_API_PORT:-8081}' >> /tmp/run_tmp && \
     echo '# Debug: Log variable values' >> /tmp/run_tmp && \
     echo 'echo "DEVICE=$DEVICE, NETWORK_DEVICE=$NETWORK_DEVICE, BAUDRATE=$BAUDRATE_LOCAL, FLOW_CONTROL=$FLOW_CONTROL_LOCAL"' >> /tmp/run_tmp && \
     echo 'echo "INFRA_IF=$INFRA_IF, THREAD_IF=$THREAD_IF, LOG_LEVEL_LOCAL=$LOG_LEVEL_LOCAL"' >> /tmp/run_tmp && \
@@ -212,7 +214,7 @@ RUN sed -n '/^#!/,/^echo "Starting otbr-agent..."/p' /etc/s6-overlay/s6-rc.d/otb
     echo 'echo "Constructed RCP_DEVICE: $RCP_DEVICE"' >> /tmp/run_tmp && \
     echo 'exec s6-notifyoncheck -d -s 300 -w 300 -n 0 stdbuf -oL \' >> /tmp/run_tmp && \
     echo '     "/usr/sbin/otbr-agent" \' >> /tmp/run_tmp && \
-    echo '     --rest-listen-port "${OTBR_REST_PORT:=8081}" \' >> /tmp/run_tmp && \
+    echo '     --rest-listen-port "${REST_API_PORT_LOCAL}" \' >> /tmp/run_tmp && \
     echo '     -d"${LOG_LEVEL_LOCAL}" -v -s \' >> /tmp/run_tmp && \
     echo '     -I "${THREAD_IF}" \' >> /tmp/run_tmp && \
     echo '     -B "${INFRA_IF}" \' >> /tmp/run_tmp && \
