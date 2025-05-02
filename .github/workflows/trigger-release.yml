@@ -1,4 +1,4 @@
-name: Check Docker Image and Create Release
+name: Check OTBR Image and Create Release
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write  # Required for creating releases and pushing commits
 
 jobs:
-  check-and-release:
+  check-and-create-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
