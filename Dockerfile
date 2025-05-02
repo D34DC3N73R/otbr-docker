@@ -142,6 +142,14 @@ ENV LOG_LEVEL=3
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Create a policy-rc.d script to prevent services from starting during build
+RUN echo "#!/bin/sh\nexit 101" > /usr/sbin/policy-rc.d && \
+    chmod +x /usr/sbin/policy-rc.d
+
+# Create /run/avahi-daemon directory to avoid adduser error
+RUN mkdir -p /run/avahi-daemon && \
+    chmod 755 /run/avahi-daemon
+
 # Install runtime dependencies and configure avahi-daemon
 RUN apt-get update && \
     apt-get install -y \
@@ -162,7 +170,8 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive dpkg-reconfigure avahi-daemon || true && \
     /var/lib/dpkg/info/avahi-daemon.postinst configure || true && \
     echo -e "# Enable mDNS for the following domains\nlocal\n0.in-addr.arpa\n8.e.f.ip6.arpa\n9.e.f.ip6.arpa\na.e.f.ip6.arpa\nb.e.f.ip6.arpa" > /etc/nss_mdns.conf && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    rm -f /usr/sbin/policy-rc.d
 
 # Install s6-overlay
 RUN case "${TARGETARCH}" in \
