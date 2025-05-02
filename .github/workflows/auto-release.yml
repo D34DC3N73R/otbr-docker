@@ -65,6 +65,7 @@ jobs:
           body: "Auto-release triggered by new openthread/border-router:latest image (digest: ${{ steps.fetch-docker-digest.outputs.latest_digest }})."
           draft: false
           prerelease: false
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Update stored digest
         if: steps.compare-digests.outputs.new_release_needed == 'true'
