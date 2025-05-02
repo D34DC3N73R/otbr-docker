@@ -12,7 +12,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: keep-alive # Check out the keep-alive branch (will be created if it doesn't exist)
+          ref: main  # Start with the main branch
+
+      - name: Create or switch to keep-alive branch
+        run: |
+          # Check if keep-alive branch exists
+          if git ls-remote --heads origin keep-alive | grep -q keep-alive; then
+            git checkout keep-alive
+          else
+            git checkout -b keep-alive
+          fi
 
       - name: Create dummy commit
         run: |
@@ -21,4 +30,4 @@ jobs:
           git config user.email "action@github.com"
           git add keep-alive.txt
           git commit -m "Keep-alive commit to prevent scheduled workflow disable"
-          git push origin keep-alive # Push to the keep-alive branch
+          git push origin keep-alive
