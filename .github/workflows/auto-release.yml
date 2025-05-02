@@ -1,0 +1,74 @@
+name: Check Docker Image and Create Release
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Runs every 6 hours
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch latest Docker Hub image digest
+        id: fetch-docker-digest
+        run: |
+          # Fetch the digest of the latest openthread/border-router image
+          TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:openthread/border-router:pull" | jq -r .token)
+          DIGEST=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://registry-1.docker.io/v2/openthread/border-router/manifests/latest" | jq -r .manifests[0].digest)
+          if [ -z "$DIGEST" ]; then
+            echo "Failed to fetch image digest."
+            exit 1
+          fi
+          echo "Latest Docker Hub digest: $DIGEST"
+          echo "latest_digest=$DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Read previous digest
+        id: read-previous-digest
+        run: |
+          if [ -f "last_digest.txt" ]; then
+            PREVIOUS_DIGEST=$(cat last_digest.txt)
+          else
+            PREVIOUS_DIGEST=""
+          fi
+          echo "Previous digest: $PREVIOUS_DIGEST"
+          echo "previous_digest=$PREVIOUS_DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Compare digests and decide
+        id: compare-digests
+        run: |
+          LATEST_DIGEST=${{ steps.fetch-docker-digest.outputs.latest_digest }}
+          PREVIOUS_DIGEST=${{ steps.read-previous-digest.outputs.previous_digest }}
+          if [ "$LATEST_DIGEST" != "$PREVIOUS_DIGEST" ]; then
+            echo "Docker image digest has changed ($PREVIOUS_DIGEST -> $LATEST_DIGEST). Creating new release."
+            echo "new_release_needed=true" >> $GITHUB_OUTPUT
+            # Generate date-based tag (e.g., v2025.05.01)
+            DATE_TAG=$(date +v%Y.%m.%d)
+            echo "release_tag=$DATE_TAG" >> $GITHUB_OUTPUT
+          else
+            echo "Digest unchanged. No new release needed."
+            echo "new_release_needed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        if: steps.compare-digests.outputs.new_release_needed == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.compare-digests.outputs.release_tag }}
+          name: "Auto-Release for OTBR ${{ steps.compare-digests.outputs.release_tag }}"
+          body: "Auto-release triggered by new openthread/border-router:latest image (digest: ${{ steps.fetch-docker-digest.outputs.latest_digest }})."
+          draft: false
+          prerelease: false
+
+      - name: Update stored digest
+        if: steps.compare-digests.outputs.new_release_needed == 'true'
+        run: |
+          echo "${{ steps.fetch-docker-digest.outputs.latest_digest }}" > last_digest.txt
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add last_digest.txt
+          git commit -m "Update stored digest for openthread/border-router:latest"
+          git push origin main
