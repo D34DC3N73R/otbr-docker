@@ -1,0 +1,24 @@
+name: Keep Repository Active
+
+on:
+  schedule:
+    - cron: '0 0 */30 * *' # Runs every 30 days at midnight UTC
+  workflow_dispatch: # For manual testing
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: keep-alive # Check out the keep-alive branch (will be created if it doesn't exist)
+
+      - name: Create dummy commit
+        run: |
+          echo "Keep-alive commit at $(date)" >> keep-alive.txt
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add keep-alive.txt
+          git commit -m "Keep-alive commit to prevent scheduled workflow disable"
+          git push origin keep-alive # Push to the keep-alive branch
