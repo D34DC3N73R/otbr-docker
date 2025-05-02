@@ -5,6 +5,9 @@ on:
     - cron: '0 */6 * * *' # Runs every 6 hours
   workflow_dispatch: # Allows manual triggering
 
+permissions:
+  contents: write  # Required for creating releases and pushing commits
+
 jobs:
   check-and-release:
     runs-on: ubuntu-latest
