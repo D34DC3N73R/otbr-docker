@@ -1,0 +1,24 @@
+services:
+  otbr:
+    image: ghcr.io/d34dc3n73r/otbr-docker
+    container_name: otbr
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - /path/to/docker-confs/otbr:/data/thread # Thread network persistent data storage
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - NETWORK_DEVICE= #Network Device (Leave empty, remove, or comment out if not used)
+      - DEVICE=/dev/ttyUSB0 #RCP Device Path
+      - BAUDRATE=460800 #RCP Baudrate
+      - FLOW_CONTROL=1 #Hardware Flow Control
+      - BACKBONE_NET=eth0 #Main Network
+      - THREAD_NET=wpan0 #Thread Network
+      - LOG_LEVEL=3
+    devices:
+      - /dev/ttyUSB0
+      - /dev/net/tun
