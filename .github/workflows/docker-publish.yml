@@ -35,41 +35,24 @@ jobs:
       - name: Set tags
         id: set_tags
         run: |
-          # Use the release tag (e.g., v2025.05.01)
+          # Use the release tag (e.g., v2025.05.04)
           VERSION=${{ github.event.release.tag_name }}
           FULL_IMAGE_NAME="${{ env.REGISTRY }}/${{ env.OWNER_LC }}/${{ env.IMAGE_NAME }}"
           MANIFEST_TAG="${VERSION}"
-          AMD64_TAG="amd64-${VERSION}"
-          ARM64_TAG="arm64-${VERSION}"
           LATEST_TAG="latest"
           echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_OUTPUT
           echo "MANIFEST_TAG=$MANIFEST_TAG" >> $GITHUB_OUTPUT
-          echo "AMD64_TAG=$AMD64_TAG" >> $GITHUB_OUTPUT
-          echo "ARM64_TAG=$ARM64_TAG" >> $GITHUB_OUTPUT
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_OUTPUT
 
-      - name: Build and push multiarch images
+      - name: Build and push multiarch image
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.AMD64_TAG }}
-            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.ARM64_TAG }}
+            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.MANIFEST_TAG }}
+            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.LATEST_TAG }}
           build-args: |
             GITHUB_REPO=openthread/ot-br-posix
             GIT_COMMIT=HEAD
-
-      - name: Create and push manifest
-        run: |
-          # Create and push the versioned manifest
-          docker manifest create ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.MANIFEST_TAG }} \
-            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.AMD64_TAG }} \
-            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.ARM64_TAG }}
-          docker manifest push ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.MANIFEST_TAG }}
-          # Create and push the latest manifest
-          docker manifest create ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.LATEST_TAG }} \
-            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.AMD64_TAG }} \
-            ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.ARM64_TAG }}
-          docker manifest push ${{ steps.set_tags.outputs.FULL_IMAGE_NAME }}:${{ steps.set_tags.outputs.LATEST_TAG }}
