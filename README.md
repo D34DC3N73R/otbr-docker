@@ -44,6 +44,7 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
   - Provides user-friendly environment variables and flow control options.
 - **Coming Soon**:
   - ✅ ~User-defined REST API port.~
+  - ✅ ~Enable Web UI with user-defined port.~
   - Environment variables to enable/disable the Firewall and NAT64. Both are currently enabled.
 
 ## Docker Compose
