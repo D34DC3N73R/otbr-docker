@@ -10,8 +10,8 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
 - **REST API Enabled**:
   - Includes the REST API with a user-defined port.
 
-- **Web UI Disabled**:
-  - Removed to reduce image size.
+- **Web UI Enabled**:
+  - Web UI with user-defined port.
 
 - **Multiarch**:
   - Built for `amd64` and `arm64` architectures.
@@ -23,7 +23,8 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
   - `FLOW_CONTROL`: Hardware flow control (e.g., `1` for enabled, `0` for disabled).
   - `BACKBONE_NET`: Infrastructure interface (e.g., `eth0`).
   - `THREAD_NET`: Thread interface (e.g., `wpan0`).
-  - `REST_API_PORT`: User-defined REST API port (default `8081`)
+  - `WEB_PORT`: User-defined Web UI port (default `8080`)
+  - `REST_PORT`: User-defined REST API port (default `8081`)
   - `LOG_LEVEL`: OTBR log level (emergency=`0` alert=`1` critical=`2` error=`3` warning=`4` notice=`5` info=`6` debug=`7`). 
 
 - **Firewall and NAT64 Enabled**:
@@ -33,6 +34,8 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
 
 - **REST API Support**:
   - This image includes the REST API on a user-defined port.
+- **Web UI Enabled**:
+  - The web UI is enabled with a user-defined port.
 - **Healthcheck**:
   - Integrated container health check.
 - **"Date" release tags**:
@@ -65,7 +68,8 @@ services:
       - FLOW_CONTROL=1 #Hardware Flow Control
       - BACKBONE_NET=eth0 #Main Network Interface
       - THREAD_NET=wpan0 #Thread Network Interface
-      - REST_API_PORT=8081 # User Defined REST API PORT
+      - WEB_PORT=8080 # User Defined Web UI PORT
+      - REST_PORT=8081 # User Defined REST API PORT
       - LOG_LEVEL=3
     devices:
       - /dev/ttyUSB0
