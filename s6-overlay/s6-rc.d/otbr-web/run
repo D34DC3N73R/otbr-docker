@@ -1,0 +1,6 @@
+#!/command/with-contenv bash
+
+WEB_PORT_LOCAL=${WEB_PORT:-8080}
+echo "Starting otbr-web on port ${WEB_PORT_LOCAL}"
+THREAD_IF=${THREAD_NET:-${OT_THREAD_IF:-wpan0}}
+exec stdbuf -oL /usr/sbin/otbr-web -p "${WEB_PORT_LOCAL}" -I "${THREAD_IF}" -a ::

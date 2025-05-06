@@ -39,7 +39,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /usr/src
 
-# Install build dependencies
+# Install build dependencies, including web UI, otbr-agent, and bootstrap dependencies
 RUN apt-get update && \
     apt-get install -y \
         build-essential \
@@ -49,12 +49,44 @@ RUN apt-get update && \
         git \
         libavahi-client-dev \
         libavahi-common-dev \
+        libavahi-core-dev \
+        libavahi-compat-libdnssd-dev \
+        libavahi-glib-dev \
+        libmicrohttpd-dev \
+        libprotobuf-dev \
+        libnetfilter-queue-dev \
+        libdbus-1-dev \
+        libreadline-dev \
+        libncurses-dev \
+        libjsoncpp-dev \
+        libboost-dev \
+        libssl-dev \
+        libevent-dev \
+        libglib2.0-dev \
+        python3 \
         ninja-build \
-        wget && \
+        pkg-config \
+        protobuf-compiler \
+        wget \
+        lsb-release \
+        sudo \
+        psmisc \
+        avahi-utils && \
+    curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Clone ot-br-posix first to access patch files
+# Clone ot-br-posix
 RUN git clone --depth 1 -b main "https://github.com/${GITHUB_REPO}.git"
+
+# Copy the custom otbr-agent/run script to overwrite the default
+COPY s6-overlay/s6-rc.d/otbr-agent/run /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/otbr-agent/run
+
+# Copy the new otbr-web directory
+COPY s6-overlay/s6-rc.d/otbr-web/ /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/otbr-web/
+
+# Copy the user/contents.d/otbr-web file to add otbr-web to user services
+COPY s6-overlay/s6-rc.d/user/contents.d/otbr-web /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/otbr-web
 
 # Clone and build mDNSResponder
 RUN shopt -s nullglob && \
@@ -71,14 +103,38 @@ RUN shopt -s nullglob && \
     ln -sf libdns_sd.so.1 /install/usr/lib/libdns_sd.so && \
     cp ../mDNSShared/dns_sd.h /install/usr/include/dns_sd.h
 
-# Build ot-br-posix with mDNSResponder include and library paths, enable ot-ctl and REST API
+# Build ot-br-posix with mDNSResponder include and library paths, enable REST API and Web UI
 RUN cd ot-br-posix && \
     git fetch origin "${GIT_COMMIT}" && \
     git checkout "${GIT_COMMIT}" && \
     git submodule update --depth 1 --init && \
-    cmake -GNinja \
+    ./script/bootstrap || { echo "script/bootstrap failed"; exit 1; }
+
+# Install npm dependencies and locate Web UI assets
+RUN cd ot-br-posix && \
+    if [ -f src/web/web-service/frontend/package.json ]; then \
+        ls -l src/web/web-service/frontend/package.json && \
+        cat src/web/web-service/frontend/package.json; \
+    else \
+        echo "package.json not found"; \
+    fi && \
+    npm cache clean --force && \
+    rm -f src/web/web-service/frontend/package-lock.json && \
+    cd src/web/web-service/frontend && \
+    npm install --prefix . --loglevel=verbose || { echo "npm install failed"; exit 1; } && \
+    npm audit fix || { echo "npm audit fix failed, continuing"; } && \
+    ls -l node_modules || echo "node_modules not created" && \
+    ls -lR dist/ || echo "dist/ directory not found" && \
+    cd ../../..
+
+# Debug: Verify libraries before CMake
+RUN echo "Listing /install/usr/lib before CMake:" && \
+    ls -l /install/usr/lib/libdns_sd.so* || echo "No libdns_sd.so found"
+
+# Run CMake
+RUN cd ot-br-posix && \
+    cmake -S /usr/src/ot-br-posix -B /usr/src/ot-br-posix/build -GNinja \
         -DBUILD_TESTING=OFF \
-        -DCMAKE_INSTALL_PREFIX=/usr \
         -DOTBR_BORDER_ROUTING=ON \
         -DOTBR_BACKBONE_ROUTER=ON \
         -DOTBR_DBUS=OFF \
@@ -90,16 +146,42 @@ RUN cd ot-br-posix && \
         -DOTBR_DNS_UPSTREAM_QUERY=ON \
         -DOT_POSIX_NAT64_CIDR="192.168.255.0/24" \
         -DOT_FIREWALL=ON \
-        -DOPENTHREAD_POSIX=ON \
-        -DOTBR_POSIX_CONFIG_CLI=ON \
         -DOTBR_REST=ON \
+        -DOTBR_WEB=ON \
+        -DOTBR_CLI=ON \
         -DCMAKE_C_FLAGS="-I/install/usr/include" \
         -DCMAKE_CXX_FLAGS="-I/install/usr/include" \
-        -DCMAKE_EXE_LINKER_FLAGS="-L/install/usr/lib" \
-        -DCMAKE_INSTALL_PREFIX=/install/usr && \
-    ninja && \
-    ninja install && \
-    cp third_party/openthread/repo/src/posix/ot-ctl /install/usr/sbin/ot-ctl || echo "ot-ctl not found in build, skipping"
+        -DCMAKE_EXE_LINKER_FLAGS="-L/install/usr/lib -ldns_sd -Wl,-rpath=/install/usr/lib" \
+        -DCMAKE_INSTALL_PREFIX=/install/usr || { echo "CMake failed"; exit 1; }
+
+# Run ninja
+RUN cd ot-br-posix && \
+    echo "Running ninja:" && \
+    ninja -v -C /usr/src/ot-br-posix/build || { echo "ninja failed"; exit 1; }
+
+# Run ninja install and copy Web UI assets
+RUN cd ot-br-posix && \
+    echo "Running ninja install:" && \
+    ninja install -C /usr/src/ot-br-posix/build || { echo "ninja install failed"; exit 1; } && \
+    echo "Listing /install/usr/sbin/:" && \
+    ls -l /install/usr/sbin/ && \
+    echo "Listing /install/usr/bin/:" && \
+    ls -l /install/usr/bin/ || echo "No binaries in /install/usr/bin" && \
+    echo "Listing /install/usr/lib/:" && \
+    ls -l /install/usr/lib/ || echo "No libraries in /install/usr/lib" && \
+    echo "Listing /install/usr/lib/x86_64-linux-gnu/:" && \
+    ls -l /install/usr/lib/x86_64-linux-gnu/ || echo "No libraries in /install/usr/lib/x86_64-linux-gnu" && \
+    echo "Finding libdns_sd.so* in /install/:" && \
+    find /install -name "libdns_sd.so*" || echo "No libdns_sd.so* files found in /install" && \
+    echo "Searching for otbr-agent:" && \
+    find /install -name otbr-agent || echo "otbr-agent not found in /install" && \
+    echo "Searching for otbr-web:" && \
+    find /install -name otbr-web || echo "otbr-web not found in /install" && \
+    echo "Copying Web UI assets from src/web/web-service/frontend/dist/ to /install/usr/share/otbr-web/:" && \
+    mkdir -p /install/usr/share/otbr-web && \
+    cp -r src/web/web-service/frontend/dist/* /install/usr/share/otbr-web/ || echo "Failed to copy Web UI assets" && \
+    echo "Listing /install/usr/share/otbr-web/:" && \
+    ls -lR /install/usr/share/otbr-web/ || echo "No assets in /install/usr/share/otbr-web/"
 
 # Runtime stage
 FROM ubuntu:24.04
@@ -126,56 +208,47 @@ ENV REST_API=1
 ENV FIREWALL=1
 ENV OT_SRP_ADV_PROXY=0
 ENV DOCKER=1
-ENV OTBR_DOCKER_REQS="sudo python3"
-ENV OTBR_DOCKER_DEPS="git ca-certificates"
-ENV OTBR_BUILD_DEPS="apt-utils build-essential psmisc ninja-build cmake wget ca-certificates libreadline-dev libncurses-dev libdbus-1-dev libavahi-common-dev libavahi-client-dev libnetfilter-queue-dev"
-ENV OTBR_OT_BACKBONE_CI_DEPS="curl lcov wget build-essential python3-dbus python3-zeroconf socat"
-
-# Default values for custom variables
 ENV DEVICE=/dev/ttyUSB0
 ENV NETWORK_DEVICE=""
 ENV BAUDRATE=460800
 ENV FLOW_CONTROL=1
 ENV BACKBONE_NET=eth0
 ENV THREAD_NET=wpan0
-ENV LOG_LEVEL=3
-ENV REST_API_PORT=8081
+ENV LOG_LEVEL=4
+ENV WEB_PORT=8080
+ENV REST_PORT=8081
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Create a policy-rc.d script to prevent services from starting during build
-RUN echo "#!/bin/sh\nexit 101" > /usr/sbin/policy-rc.d && \
-    chmod +x /usr/sbin/policy-rc.d
-
-# Create /run/avahi-daemon directory to avoid adduser error
-RUN mkdir -p /run/avahi-daemon && \
-    chmod 755 /run/avahi-daemon
-
-# Install runtime dependencies and configure avahi-daemon
-RUN apt-get update && \
+# Copy artifacts from builder stage and set up runtime environment
+RUN --mount=type=bind,source=/,target=/builder,from=builder \
+    mkdir -p /usr/sbin /usr/lib/x86_64-linux-gnu /install/usr/share/otbr-web && \
+    cp -r /builder/install/usr/sbin/* /usr/sbin/ && \
+    cp /builder/install/usr/lib/libdns_sd.so.1 /usr/lib/x86_64-linux-gnu/libdns_sd.so.1 && \
+    ln -sf libdns_sd.so.1 /usr/lib/x86_64-linux-gnu/libdns_sd.so && \
+    ldconfig && \
+    cp -r /builder/install/usr/share/otbr-web/* /install/usr/share/otbr-web/ && \
+    cp -r /builder/usr/src/ot-br-posix/etc/docker/border-router/rootfs/* / && \
+    echo "#!/bin/sh\nexit 101" > /usr/sbin/policy-rc.d && \
+    chmod +x /usr/sbin/policy-rc.d && \
+    mkdir -p /run/systemd/system && \
+    apt-get update && \
     apt-get install -y \
-        avahi-daemon \
-        avahi-utils \
-        ipset \
-        iptables \
-        kmod \
         libavahi-client3 \
         libavahi-common3 \
-        libkmod2 \
         libmnl0 \
         libnfnetlink0 \
         libnss-mdns \
+        libmicrohttpd12 \
+        libprotobuf32 \
+        libjsoncpp25 \
+        libreadline8 \
         curl \
-        xz-utils && \
-    mkdir -p /run/systemd/system && \
-    DEBIAN_FRONTEND=noninteractive dpkg-reconfigure avahi-daemon || true && \
-    /var/lib/dpkg/info/avahi-daemon.postinst configure || true && \
+        xz-utils \
+        ipset \
+        iptables && \
     echo -e "# Enable mDNS for the following domains\nlocal\n0.in-addr.arpa\n8.e.f.ip6.arpa\n9.e.f.ip6.arpa\na.e.f.ip6.arpa\nb.e.f.ip6.arpa" > /etc/nss_mdns.conf && \
-    rm -rf /var/lib/apt/lists/* && \
-    rm -f /usr/sbin/policy-rc.d
-
-# Install s6-overlay
-RUN case "${TARGETARCH}" in \
+    case "${TARGETARCH}" in \
         amd64) S6_ARCH="x86_64" ;; \
         arm64) S6_ARCH="aarch64" ;; \
         *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
@@ -184,48 +257,12 @@ RUN case "${TARGETARCH}" in \
     curl -L -f -o /tmp/s6-overlay-${S6_ARCH}.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
     tar -Jxvf /tmp/s6-overlay-noarch.tar.xz -C / && \
     tar -Jxvf /tmp/s6-overlay-${S6_ARCH}.tar.xz -C / && \
-    rm -f /tmp/s6-overlay-noarch.tar.xz /tmp/s6-overlay-${S6_ARCH}.tar.xz
-
-# Copy built artifacts from builder stage
-COPY --from=builder /install  /install /
-
-# Copy rootfs from builder stage
-COPY --from=builder /usr/src/ot-br-posix/etc/docker/border-router/rootfs /
-
-# Modify otbr-agent run script to use custom variables and dynamically construct RCP_DEVICE
-RUN sed -n '/^#!/,/^echo "Starting otbr-agent..."/p' /etc/s6-overlay/s6-rc.d/otbr-agent/run > /tmp/run_tmp && \
-    echo '# Debug: Log script start' >> /tmp/run_tmp && \
-    echo 'echo "otbr-agent run script started"' >> /tmp/run_tmp && \
-    echo '# Map user-friendly variables to local variables to avoid readonly issues' >> /tmp/run_tmp && \
-    echo 'RCP_DEVICE=${DEVICE:-${OT_RCP_DEVICE:-/dev/ttyUSB0}}' >> /tmp/run_tmp && \
-    echo 'BAUDRATE_LOCAL=${BAUDRATE:-460800}' >> /tmp/run_tmp && \
-    echo 'FLOW_CONTROL_LOCAL=${FLOW_CONTROL:-1}' >> /tmp/run_tmp && \
-    echo 'INFRA_IF=${BACKBONE_NET:-${OT_INFRA_IF:-eth0}}' >> /tmp/run_tmp && \
-    echo 'THREAD_IF=${THREAD_NET:-${OT_THREAD_IF:-wpan0}}' >> /tmp/run_tmp && \
-    echo 'LOG_LEVEL_LOCAL=${LOG_LEVEL:-${OT_LOG_LEVEL:-3}}' >> /tmp/run_tmp && \
-    echo 'REST_API_PORT_LOCAL=${REST_API_PORT:-8081}' >> /tmp/run_tmp && \
-    echo '# Debug: Log variable values' >> /tmp/run_tmp && \
-    echo 'echo "DEVICE=$DEVICE, NETWORK_DEVICE=$NETWORK_DEVICE, BAUDRATE=$BAUDRATE_LOCAL, FLOW_CONTROL=$FLOW_CONTROL_LOCAL"' >> /tmp/run_tmp && \
-    echo 'echo "INFRA_IF=$INFRA_IF, THREAD_IF=$THREAD_IF, LOG_LEVEL_LOCAL=$LOG_LEVEL_LOCAL"' >> /tmp/run_tmp && \
-    echo '# Dynamically construct RCP_DEVICE with explicit FLOW_CONTROL logic' >> /tmp/run_tmp && \
-    echo '[ "${FLOW_CONTROL_LOCAL}" = "1" ] && FLOW_CONTROL_PARAM="&uart-flow-control" || FLOW_CONTROL_PARAM="&uart-init-deassert"' >> /tmp/run_tmp && \
-    echo 'if [ -n "$NETWORK_DEVICE" ]; then RCP_DEVICE="spinel+hdlc+uart://$NETWORK_DEVICE?uart-baudrate=$BAUDRATE_LOCAL$FLOW_CONTROL_PARAM"; else RCP_DEVICE="spinel+hdlc+uart://$RCP_DEVICE?uart-baudrate=$BAUDRATE_LOCAL$FLOW_CONTROL_PARAM"; fi' >> /tmp/run_tmp && \
-    echo '# Debug: Log the constructed RCP_DEVICE' >> /tmp/run_tmp && \
-    echo 'echo "Constructed RCP_DEVICE: $RCP_DEVICE"' >> /tmp/run_tmp && \
-    echo 'exec s6-notifyoncheck -d -s 300 -w 300 -n 0 stdbuf -oL \' >> /tmp/run_tmp && \
-    echo '     "/usr/sbin/otbr-agent" \' >> /tmp/run_tmp && \
-    echo '     --rest-listen-port "${REST_API_PORT_LOCAL}" \' >> /tmp/run_tmp && \
-    echo '     -d"${LOG_LEVEL_LOCAL}" -v -s \' >> /tmp/run_tmp && \
-    echo '     -I "${THREAD_IF}" \' >> /tmp/run_tmp && \
-    echo '     -B "${INFRA_IF}" \' >> /tmp/run_tmp && \
-    echo '     "${RCP_DEVICE}" \' >> /tmp/run_tmp && \
-    echo '     "trel://${INFRA_IF}"' >> /tmp/run_tmp && \
-    cp /tmp/run_tmp /etc/s6-overlay/s6-rc.d/otbr-agent/run && \
-    chmod +x /etc/s6-overlay/s6-rc.d/otbr-agent/run && \
-    rm /tmp/run_tmp
+    rm -rf /var/lib/apt/lists/* /tmp/s6-overlay-noarch.tar.xz /tmp/s6-overlay-${S6_ARCH}.tar.xz /usr/sbin/policy-rc.d && \
+    chmod +x /etc/s6-overlay/s6-rc.d/otbr-agent/run /etc/s6-overlay/s6-rc.d/otbr-agent/finish /etc/s6-overlay/s6-rc.d/otbr-agent/data/* && \
+    chmod +x /etc/s6-overlay/s6-rc.d/otbr-web/run /etc/s6-overlay/s6-rc.d/otbr-web/finish
 
 WORKDIR /app
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD ot-ctl state
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD ot-ctl state && curl -f http://localhost:${WEB_PORT:-8080}/ || exit 1
 
 ENTRYPOINT ["/init"]
