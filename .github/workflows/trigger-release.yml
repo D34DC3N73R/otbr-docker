@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history to check existing tags
 
       - name: Fetch latest Docker Hub image digest
         id: fetch-docker-digest
@@ -48,9 +50,22 @@ jobs:
           if [ "$LATEST_DIGEST" != "$PREVIOUS_DIGEST" ]; then
             echo "Docker image digest has changed ($PREVIOUS_DIGEST -> $LATEST_DIGEST). Creating new release."
             echo "new_release_needed=true" >> $GITHUB_OUTPUT
-            # Generate date-based tag (e.g., v2025.05.01)
-            DATE_TAG=$(date +v%Y.%m.%d)
-            echo "release_tag=$DATE_TAG" >> $GITHUB_OUTPUT
+
+            # Generate base date tag (e.g., v2025.05.01)
+            BASE_TAG=$(date +v%Y.%m.%d)
+            echo "Base tag: $BASE_TAG"
+
+            # Check for existing tags and append counter if needed
+            COUNTER=0
+            RELEASE_TAG="$BASE_TAG"
+            while git tag | grep -q "^$RELEASE_TAG$"; do
+              COUNTER=$((COUNTER + 1))
+              RELEASE_TAG="${BASE_TAG}-${COUNTER}"
+              echo "Tag $BASE_TAG already exists, trying $RELEASE_TAG"
+            done
+
+            echo "Final release tag: $RELEASE_TAG"
+            echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           else
             echo "Digest unchanged. No new release needed."
             echo "new_release_needed=false" >> $GITHUB_OUTPUT
