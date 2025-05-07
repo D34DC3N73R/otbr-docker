@@ -62,7 +62,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     volumes:
-      - /path/to/docker-confs/otbr:/data/thread # Thread network persistent data storage
+      - ./otbr:/data/thread # Thread network persistent data storage
       - /etc/localtime:/etc/localtime:ro
     environment:
       - NETWORK_DEVICE= #Network Device (Leave empty, remove, or comment out if not used)
