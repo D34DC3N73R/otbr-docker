@@ -212,6 +212,6 @@ RUN --mount=type=bind,source=/,target=/builder,from=builder \
 
 WORKDIR /app
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD ot-ctl state && curl -f http://localhost:${WEB_PORT:-8080}/ || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:8081/node/state | grep -Eq '"router"|"leader"' && curl -f http://localhost:${WEB_PORT:-8080}/ || exit 1
 
 ENTRYPOINT ["/init"]
