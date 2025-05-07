@@ -9,7 +9,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     volumes:
-      - /path/to/docker-confs/otbr:/data/thread # Thread network persistent data storage
+      - ./otbr:/data/thread # Thread network persistent data storage
       - /etc/localtime:/etc/localtime:ro
     environment:
       - NETWORK_DEVICE= # Network Device (Not tested - Leave empty, remove, or comment out if not used)
@@ -18,7 +18,8 @@ services:
       - FLOW_CONTROL=1 # Hardware Flow Control
       - BACKBONE_NET=eth0 # Main Network
       - THREAD_NET=wpan0 # Thread Network
-      - REST_API_PORT=8081 # User Defined REST API PORT
+      - WEB_PORT=8080 # Web UI port
+      - REST_PORT=8081 # User Defined REST API port
       - LOG_LEVEL=3 # emergency=0 alert=1 critical=2 error=3 warning=4 notice=5 info=6 debug=7
     devices:
       - /dev/ttyUSB0
