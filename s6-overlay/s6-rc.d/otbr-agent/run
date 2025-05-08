@@ -65,6 +65,12 @@ readonly OT_FORWARD_EGRESS_CHAIN
 REST_PORT="${REST_PORT:-8081}"
 readonly REST_PORT
 
+# Add options to enable/disable firewall and NAT64, default to 1 (enabled)
+FIREWALL="${FIREWALL:-1}"
+readonly FIREWALL
+NAT64="${NAT64:-1}"
+readonly NAT64
+
 die()
 {
     echo >&2 "ERROR: $*"
@@ -73,66 +79,80 @@ die()
 
 mkdir -p /data/thread && ln -sft /var/lib /data/thread || die "Could not create directory /var/lib/thread to store Thread data."
 
-echo "Configuring OpenThread firewall..."
-
+# Always create ipsets to avoid errors from otbr-agent, even if firewall is disabled
 ipset create -exist otbr-ingress-deny-src hash:net family inet6
 ipset create -exist otbr-ingress-deny-src-swap hash:net family inet6
 ipset create -exist otbr-ingress-allow-dst hash:net family inet6
 ipset create -exist otbr-ingress-allow-dst-swap hash:net family inet6
 
-# Dynamically determine LAN IPv6 prefix from OT_INFRA_IF (global unicast addresses starting with 2 or 3)
-FULL_ADDRESS=$(ip -6 addr show dev "${OT_INFRA_IF}" scope global | grep -oP 'inet6 \K[2-3][0-9a-f:]+/[0-9]+' | head -1)
-if [ -n "$FULL_ADDRESS" ]; then
-    # Split the address and prefix length
-    ADDRESS=$(echo "$FULL_ADDRESS" | cut -d'/' -f1)
-    PREFIX_LENGTH=$(echo "$FULL_ADDRESS" | cut -d'/' -f2)
-    # Extract the first 4 groups (64 bits) for a /64 prefix
-    NETWORK_PREFIX=$(echo "$ADDRESS" | cut -d':' -f1-4)
-    LAN_IPV6_PREFIX="${NETWORK_PREFIX}::/${PREFIX_LENGTH}"
-    echo "Using LAN IPv6 prefix: $LAN_IPV6_PREFIX"
+# Configure firewall if enabled
+if [ "$FIREWALL" = "1" ]; then
+    echo "Configuring OpenThread firewall (enabled)..."
+
+    # Dynamically determine LAN IPv6 prefix from OT_INFRA_IF (global unicast addresses starting with 2 or 3)
+    FULL_ADDRESS=$(ip -6 addr show dev "${OT_INFRA_IF}" scope global | grep -oP 'inet6 \K[2-3][0-9a-f:]+/[0-9]+' | head -1)
+    if [ -n "$FULL_ADDRESS" ]; then
+        # Split the address and prefix length
+        ADDRESS=$(echo "$FULL_ADDRESS" | cut -d'/' -f1)
+        PREFIX_LENGTH=$(echo "$FULL_ADDRESS" | cut -d'/' -f2)
+        # Extract the first 4 groups (64 bits) for a /64 prefix
+        NETWORK_PREFIX=$(echo "$ADDRESS" | cut -d':' -f1-4)
+        LAN_IPV6_PREFIX="${NETWORK_PREFIX}::/${PREFIX_LENGTH}"
+        echo "Using LAN IPv6 prefix: $LAN_IPV6_PREFIX"
+    else
+        echo "Warning: Could not determine LAN IPv6 prefix for ${OT_INFRA_IF}. Skipping LAN-specific firewall rules."
+        LAN_IPV6_PREFIX=""
+    fi
+
+    # Create chains
+    ip6tables -N "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
+    ip6tables -N "${OT_FORWARD_EGRESS_CHAIN}" 2>/dev/null || true
+
+    # Apply chains to FORWARD
+    # Ingress traffic (from Thread to backbone)
+    ip6tables -D FORWARD -o "${OT_THREAD_IF}" -j "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
+    ip6tables -I FORWARD 1 -i "${OT_THREAD_IF}" -j "${OT_FORWARD_INGRESS_CHAIN}"
+
+    # Egress traffic (from backbone to Thread)
+    ip6tables -I FORWARD 2 -o "${OT_THREAD_IF}" -j "${OT_FORWARD_EGRESS_CHAIN}"
+
+    # Ingress rules (from Thread to backbone)
+    ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -i "${OT_THREAD_IF}" -j DROP
+    ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m set --match-set otbr-ingress-deny-src src -j DROP
+    ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m set --match-set otbr-ingress-allow-dst dst -j ACCEPT
+    if [ -n "$LAN_IPV6_PREFIX" ]; then
+        ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -d "${LAN_IPV6_PREFIX}" -j ACCEPT
+    fi
+    ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -d fd00::/8 -j ACCEPT  # Allow Thread unicast traffic
+    ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -j DROP
+    ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -j ACCEPT  # Allow multicast
+
+    # Egress rules (from backbone to Thread)
+    ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -d ff00::/8 -j ACCEPT  # Allow multicast traffic
+    ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -d fd00::/8 -j ACCEPT  # Allow Thread unicast traffic
+    if [ -n "$LAN_IPV6_PREFIX" ]; then
+        ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -s "${LAN_IPV6_PREFIX}" -j ACCEPT
+    fi
+    ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -m state --state RELATED,ESTABLISHED -j ACCEPT
+    ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -j DROP
 else
-    echo "Warning: Could not determine LAN IPv6 prefix for ${OT_INFRA_IF}. Skipping LAN-specific firewall rules."
-    LAN_IPV6_PREFIX=""
+    echo "OpenThread firewall is disabled (FIREWALL=0)."
+    # Ensure ip6tables allows IP forwarding
+    ip6tables -P FORWARD ACCEPT
+    # For compatibility with older systems
+    ip6tables-legacy -P FORWARD ACCEPT 2>/dev/null || true
 fi
 
-# Create chains
-ip6tables -N "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
-ip6tables -N "${OT_FORWARD_EGRESS_CHAIN}" 2>/dev/null || true
-
-# Apply chains to FORWARD
-# Ingress traffic (from Thread to backbone)
-ip6tables -D FORWARD -o "${OT_THREAD_IF}" -j "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
-ip6tables -I FORWARD 1 -i "${OT_THREAD_IF}" -j "${OT_FORWARD_INGRESS_CHAIN}"
-
-# Egress traffic (from backbone to Thread)
-ip6tables -I FORWARD 2 -o "${OT_THREAD_IF}" -j "${OT_FORWARD_EGRESS_CHAIN}"
-
-# Ingress rules (from Thread to backbone)
-ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -i "${OT_THREAD_IF}" -j DROP
-ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m set --match-set otbr-ingress-deny-src src -j DROP
-ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m set --match-set otbr-ingress-allow-dst dst -j ACCEPT
-if [ -n "$LAN_IPV6_PREFIX" ]; then
-    ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -d "${LAN_IPV6_PREFIX}" -j ACCEPT
+# Configure NAT64 if enabled
+if [ "$NAT64" = "1" ]; then
+    echo "Configuring OpenThread NAT64 (enabled)..."
+    iptables -t mangle -A PREROUTING -i "${OT_THREAD_IF}" -j MARK --set-mark 0x1001
+    iptables -t nat -A POSTROUTING -m mark --mark 0x1001 -j MASQUERADE
+    iptables -t filter -A FORWARD -o "${OT_INFRA_IF}" -j ACCEPT
+    iptables -t filter -A FORWARD -i "${OT_INFRA_IF}" -j ACCEPT
+else
+    echo "OpenThread NAT64 is disabled (NAT64=0)."
 fi
-ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -d fd00::/8 -j ACCEPT  # Allow Thread unicast traffic
-ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -m pkttype --pkt-type unicast -j DROP
-ip6tables -A "${OT_FORWARD_INGRESS_CHAIN}" -j ACCEPT  # Allow multicast
-
-# Egress rules (from backbone to Thread)
-ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -d ff00::/8 -j ACCEPT  # Allow multicast traffic
-ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -d fd00::/8 -j ACCEPT  # Allow Thread unicast traffic
-if [ -n "$LAN_IPV6_PREFIX" ]; then
-    ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -s "${LAN_IPV6_PREFIX}" -j ACCEPT
-fi
-ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -m state --state RELATED,ESTABLISHED -j ACCEPT
-ip6tables -A "${OT_FORWARD_EGRESS_CHAIN}" -j DROP
-
-echo "Configuring OpenThread NAT64..."
-
-iptables -t mangle -A PREROUTING -i "${OT_THREAD_IF}" -j MARK --set-mark 0x1001
-iptables -t nat -A POSTROUTING -m mark --mark 0x1001 -j MASQUERADE
-iptables -t filter -A FORWARD -o "${OT_INFRA_IF}" -j ACCEPT
-iptables -t filter -A FORWARD -i "${OT_INFRA_IF}" -j ACCEPT
 
 echo "Starting otbr-agent..."
 

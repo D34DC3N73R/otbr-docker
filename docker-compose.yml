@@ -21,6 +21,8 @@ services:
       - WEB_PORT=8080 # Web UI port
       - REST_PORT=8081 # User Defined REST API port
       - LOG_LEVEL=3 # emergency=0 alert=1 critical=2 error=3 warning=4 notice=5 info=6 debug=7
+      - FIREWALL=1 # Enable OTBR Enhanced Firewall
+      - NAT64=1 # Enable NAT64 rules
     devices:
       - /dev/ttyUSB0
       - /dev/net/tun
