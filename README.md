@@ -37,6 +37,28 @@ This repository provides a lightweight OpenThread Border Router (OTBR) setup, wi
   - ✅ ~User-defined REST API port.~
   - ✅ ~Web UI enabled with user-defined port.~
   - ✅ ~Environment variables to enable/disable the Firewall and NAT64.~
+  - ???
+
+## System Configuration
+### ⚠️ IMPORTANT NOTE 
+ - The ip6table_filter module is required for the OTBR firewall to function.
+ - The sysctl settings are required for the Thread network to operate correctly, enabling IPv6, forwarding, and proper router advertisement handling.
+
+Load the ip6table_filter module and ensure it persists across reboots:
+```
+sudo modprobe ip6table_filter
+echo "ip6table_filter" | sudo tee -a /etc/modules-load.d/ip6table_filter.conf
+```
+
+Add the following to enable IPv6, forwarding, and router advertisements on the host for the Thread network:
+```
+echo "net.ipv6.conf.all.disable_ipv6 = 0" | sudo tee -a /etc/sysctl.conf
+echo "net.ipv4.conf.all.forwarding = 1" | sudo tee -a /etc/sysctl.conf
+echo "net.ipv6.conf.all.forwarding = 1" | sudo tee -a /etc/sysctl.conf
+echo "net.ipv6.conf.all.accept_ra_rt_info_max_plen = 64" | sudo tee -a /etc/sysctl.conf
+echo "net.ipv6.conf.all.accept_ra = 2" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
 
 ## Docker Compose
 ```
