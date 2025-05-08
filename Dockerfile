@@ -195,6 +195,7 @@ RUN --mount=type=bind,source=/,target=/builder,from=builder \
         curl \
         xz-utils \
         ipset \
+        iproute2 \
         iptables && \
     echo -e "# Enable mDNS for the following domains\nlocal\n0.in-addr.arpa\n8.e.f.ip6.arpa\n9.e.f.ip6.arpa\na.e.f.ip6.arpa\nb.e.f.ip6.arpa" > /etc/nss_mdns.conf && \
     case "${TARGETARCH}" in \
