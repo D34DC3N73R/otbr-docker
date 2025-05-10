@@ -35,7 +35,9 @@ $\hspace{15pt}$`WEB_PORT`: _User-defined Web UI port (default `8080`)._
 $\hspace{15pt}$`REST_PORT`: _User-defined REST API port (default `8081`)._  
 $\hspace{15pt}$`LOG_LEVEL`: _OTBR log level (EMERG:`0` ALERT:`1` CRIT:`2` ERR:`3` WARN:`4` NOTICE:`5` INFO:`6` DEBUG:`7`)._  
 $\hspace{15pt}$`FIREWALL`: _Enable or disable OTBR Firewall rules (e.g., `1` enabled (default), `0` disabled)._  
-$\hspace{15pt}$`NAT64`: _Enable or disable NAT64 rules (e.g., `1` enabled (default), `0` disabled)._  
+$\hspace{15pt}$~`NAT64`: _Enable or disable NAT64 rules (e.g., `1` enabled (default), `0` disabled)._~  
+
+_* NAT64 disabled due to the removal of the DNS64 feature in ot-br-posix (commit f8aa002f905fc5890d3a6aa0802e2fda6bf18f4b) and a build system dependency that forces OTBR_NAT64_BORDER_ROUTING=ON when OTBR_NAT64=ON, preventing independent control of NAT64 border routing._
 
 ## What's Next
 **Coming Soon**:  
