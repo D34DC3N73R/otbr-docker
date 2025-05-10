@@ -1,4 +1,4 @@
-name: Build and Push OTBR Image to GHCR
+name: Docker Build
 
 on:
   release:
