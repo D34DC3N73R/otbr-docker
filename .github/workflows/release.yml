@@ -1,4 +1,4 @@
-name: Check OTBR Image and Create Release
+name: Auto-Release
 
 on:
   schedule:
