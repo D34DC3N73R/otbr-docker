@@ -96,7 +96,11 @@ services:
       REST_PORT: 8081 # User Defined REST API PORT
       LOG_LEVEL: 3 # emergency=0 alert=1 critical=2 error=3 warning=4 notice=5 info=6 debug=7
       FIREWALL: 1 # Enable OTBR Enhanced Firewall
-      NAT64: 1 # Enable NAT64 rules
+      # NAT64 disabled due to the removal of the DNS64 feature in ot-br-posix
+      # (commit f8aa002f905fc5890d3a6aa0802e2fda6bf18f4b) and a build system dependency
+      # that forces OTBR_NAT64_BORDER_ROUTING=ON when OTBR_NAT64=ON, preventing
+      # independent control of NAT64 border routing.
+      #NAT64: 0 # Enable NAT64 rules
     devices:
       - /dev/ttyUSB0
       - /dev/net/tun
