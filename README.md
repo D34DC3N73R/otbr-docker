@@ -33,7 +33,7 @@ $\hspace{15pt}$`BACKBONE_NET`: _Infrastructure interface (e.g., `eth0`)._
 $\hspace{15pt}$`THREAD_NET`: _Thread interface (e.g., `wpan0`)._  
 $\hspace{15pt}$`WEB_PORT`: _User-defined Web UI port (default `8080`)._  
 $\hspace{15pt}$`REST_PORT`: _User-defined REST API port (default `8081`)._  
-$\hspace{15pt}$`LOG_LEVEL`: _OTBR log level (emergency=`0` alert=`1` critical=`2` error=`3` warning=`4` notice=`5` info=`6` debug=`7`)._  
+$\hspace{15pt}$`LOG_LEVEL`: _OTBR log level (EMERG:`0` ALERT:`1` CRIT:`2` ERR:`3` WARN:`4` NOTICE:`5` INFO:`6` DEBUG:`7`)._  
 $\hspace{15pt}$`FIREWALL`: _Enable or disable OTBR Firewall rules (e.g., `1` enabled (default), `0` disabled)._  
 $\hspace{15pt}$`NAT64`: _Enable or disable NAT64 rules (e.g., `1` enabled (default), `0` disabled)._  
 
