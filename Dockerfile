@@ -43,9 +43,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /usr/src
 
 # Install build dependencies, including dependencies needed by ot-br-posix's script/bootstrap
-# Note: Some of these dependencies may be redundant since script/bootstrap installs them.
-# We keep them to ensure the build succeeds, but they could be trimmed in the future.
 # Removed libavahi-compat-libdnssd-dev to avoid conflicts with mDNSResponder's dns_sd.h
+# Removed libdbus-1-dev since D-Bus is disabled
 RUN apt-get update && \
     apt-get install -y \
         build-essential \
@@ -60,7 +59,6 @@ RUN apt-get update && \
         libmicrohttpd-dev \
         libprotobuf-dev \
         libnetfilter-queue-dev \
-        libdbus-1-dev \
         libreadline-dev \
         libncurses-dev \
         libjsoncpp-dev \
@@ -91,6 +89,17 @@ COPY s6-overlay/s6-rc.d/otbr-web/ /usr/src/ot-br-posix/etc/docker/border-router/
 # Copy the user/contents.d/otbr-web file to add otbr-web to user services
 COPY s6-overlay/s6-rc.d/user/contents.d/otbr-web /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/otbr-web
 
+# Create a custom configuration header for Home Assistant optimization
+RUN cat <<EOF > /usr/src/openthread-core-custom-config-posix.h
+#ifndef OPENTHREAD_CORE_CUSTOM_CONFIG_POSIX_H_
+#define OPENTHREAD_CORE_CUSTOM_CONFIG_POSIX_H_
+
+#define OPENTHREAD_POSIX_CONFIG_NETIF_PREFIX_ROUTE_METRIC 64
+#define OPENTHREAD_CONFIG_DELAY_AWARE_QUEUE_MANAGEMENT_FRAG_TAG_ENTRY_LIST_SIZE 64
+
+#endif /* OPENTHREAD_CORE_CUSTOM_CONFIG_POSIX_H_ */
+EOF
+
 # Run ot-br-posix's bootstrap script to install dependencies (including Node.js and mDNSResponder)
 RUN cd ot-br-posix && \
     git fetch origin "${GIT_COMMIT}" && \
@@ -99,6 +108,7 @@ RUN cd ot-br-posix && \
     ./script/bootstrap || { echo "script/bootstrap failed"; exit 1; }
 
 # Build ot-br-posix with mDNSResponder include and library paths, enable REST API and Web UI
+# Enable NAT64 translator but disable prefix advertisement to prevent default NAT64 prefixes
 RUN mkdir -p ot-br-posix/build/otbr && \
     cd ot-br-posix && \
     cmake -S /usr/src/ot-br-posix -B /usr/src/ot-br-posix/build/otbr -GNinja \
@@ -111,13 +121,18 @@ RUN mkdir -p ot-br-posix/build/otbr && \
         -DOTBR_DNSSD_DISCOVERY_PROXY=ON \
         -DOTBR_SRP_ADVERTISING_PROXY=ON \
         -DOTBR_TREL=ON \
-        -DOTBR_NAT64=ON \
-        -DOTBR_DNS_UPSTREAM_QUERY=ON \
-        -DOT_POSIX_NAT64_CIDR="192.168.255.0/24" \
+        -DOTBR_NAT64=OFF \
+        -DOT_NAT64_BORDER_ROUTING=OFF \
         -DOT_FIREWALL=ON \
         -DOTBR_REST=ON \
         -DOTBR_WEB=ON \
         -DOTBR_CLI=ON \
+        -DOT_COAP=OFF \
+        -DOT_COAPS=OFF \
+        -DOT_DNS_CLIENT_OVER_TCP=OFF \
+        -DOT_RCP_RESTORATION_MAX_COUNT=2 \
+        -DOT_CHANNEL_MONITOR=OFF \
+        -DOT_PROJECT_CONFIG="/usr/src/openthread-core-custom-config-posix.h" \
         -DCMAKE_C_FLAGS="-I/usr/include" \
         -DCMAKE_CXX_FLAGS="-I/usr/include" \
         -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib -ldns_sd -Wl,-rpath=/usr/lib" \
@@ -148,9 +163,6 @@ ENV OTBR_OPTIONS=
 ENV PLATFORM=Ubuntu
 ENV REFERENCE_DEVICE=0
 ENV RELEASE=1
-ENV NAT64=1
-ENV NAT64_DYNAMIC_POOL=192.168.255.0/24
-ENV DNS64=0
 ENV WEB_GUI=1
 ENV REST_API=1
 ENV FIREWALL=1
@@ -165,6 +177,7 @@ ENV THREAD_NET=wpan0
 ENV LOG_LEVEL=4
 ENV WEB_PORT=8080
 ENV REST_PORT=8081
+ENV NAT64=0
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

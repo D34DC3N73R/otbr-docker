@@ -65,10 +65,10 @@ readonly OT_FORWARD_EGRESS_CHAIN
 REST_PORT="${REST_PORT:-8081}"
 readonly REST_PORT
 
-# Add options to enable/disable firewall and NAT64, default to 1 (enabled)
+# Add options to enable/disable firewall and NAT64, default to 1 (enabled) for firewall, 0 (disabled) for NAT64
 FIREWALL="${FIREWALL:-1}"
 readonly FIREWALL
-NAT64="${NAT64:-1}"
+NAT64="${NAT64:-0}"
 readonly NAT64
 
 die()
@@ -104,16 +104,20 @@ if [ "$FIREWALL" = "1" ]; then
         LAN_IPV6_PREFIX=""
     fi
 
-    # Create chains
-    ip6tables -N "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
-    ip6tables -N "${OT_FORWARD_EGRESS_CHAIN}" 2>/dev/null || true
+    # Create or flush chains
+    ip6tables -N "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || ip6tables -F "${OT_FORWARD_INGRESS_CHAIN}"
+    ip6tables -N "${OT_FORWARD_EGRESS_CHAIN}" 2>/dev/null || ip6tables -F "${OT_FORWARD_EGRESS_CHAIN}"
 
-    # Apply chains to FORWARD
-    # Ingress traffic (from Thread to backbone)
-    ip6tables -D FORWARD -o "${OT_THREAD_IF}" -j "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
+    # Remove all existing OT_FORWARD_INGRESS and OT_FORWARD_EGRESS rules from FORWARD chain
+    while ip6tables -D FORWARD -i "${OT_THREAD_IF}" -j "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null; do
+        : # Continue removing until no more rules are found
+    done
+    while ip6tables -D FORWARD -o "${OT_THREAD_IF}" -j "${OT_FORWARD_EGRESS_CHAIN}" 2>/dev/null; do
+        : # Continue removing until no more rules are found
+    done
+
+    # Apply chains to FORWARD (add only once)
     ip6tables -I FORWARD 1 -i "${OT_THREAD_IF}" -j "${OT_FORWARD_INGRESS_CHAIN}"
-
-    # Egress traffic (from backbone to Thread)
     ip6tables -I FORWARD 2 -o "${OT_THREAD_IF}" -j "${OT_FORWARD_EGRESS_CHAIN}"
 
     # Ingress rules (from Thread to backbone)
@@ -141,18 +145,31 @@ else
     ip6tables -P FORWARD ACCEPT
     # For compatibility with older systems
     ip6tables-legacy -P FORWARD ACCEPT 2>/dev/null || true
+
+    # Remove OT_FORWARD_INGRESS and OT_FORWARD_EGRESS chains if they exist
+    ip6tables -F "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
+    ip6tables -X "${OT_FORWARD_INGRESS_CHAIN}" 2>/dev/null || true
+    ip6tables -F "${OT_FORWARD_EGRESS_CHAIN}" 2>/dev/null || true
+    ip6tables -X "${OT_FORWARD_EGRESS_CHAIN}" 2>/dev/null || true
 fi
 
-# Configure NAT64 if enabled
-if [ "$NAT64" = "1" ]; then
-    echo "Configuring OpenThread NAT64 (enabled)..."
-    iptables -t mangle -A PREROUTING -i "${OT_THREAD_IF}" -j MARK --set-mark 0x1001
-    iptables -t nat -A POSTROUTING -m mark --mark 0x1001 -j MASQUERADE
-    iptables -t filter -A FORWARD -o "${OT_INFRA_IF}" -j ACCEPT
-    iptables -t filter -A FORWARD -i "${OT_INFRA_IF}" -j ACCEPT
-else
-    echo "OpenThread NAT64 is disabled (NAT64=0)."
-fi
+
+# NAT64 prefix management and translation logic is disabled due to commit
+# f8aa002f905fc5890d3a6aa0802e2fda6bf18f4b ("[dns64] remove DNS64 feature")
+# which removed the implementation of otPlatInfraIfDiscoverNat64Prefix, causing a
+# "NotImplemented" warning when the RoutingManager attempts to discover a prefix.
+# See: https://github.com/openthread/ot-br-posix/commit/f8aa002f905fc5890d3a6aa0802e2fda6bf18f4b
+
+## Configure iptables for NAT64 translation if enabled (requires external NAT64 solution like tayga for full functionality)
+#if [ "$NAT64" = "1" ]; then
+#    echo "Configuring iptables for NAT64 translation (enabled)..."
+#    iptables -t mangle -A PREROUTING -i "${OT_THREAD_IF}" -j MARK --set-mark 0x1001
+#    iptables -t nat -A POSTROUTING -m mark --mark 0x1001 -j MASQUERADE
+#    iptables -t filter -A FORWARD -o "${OT_INFRA_IF}" -j ACCEPT
+#    iptables -t filter -A FORWARD -i "${OT_INFRA_IF}" -j ACCEPT
+#else
+#    echo "NAT64 translation is disabled (NAT64=0)."
+#fi
 
 echo "Starting otbr-agent..."
 
