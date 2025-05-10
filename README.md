@@ -1,3 +1,8 @@
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/d34dc3n73r/otbr-docker/build.yml?logo=docker&logoSize=auto&label=DOCKER%20BUILD&cacheSeconds=3600)](https://github.com/d34dc3n73r/otbr-docker/pkgs/container/otbr-docker) [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/d34dc3n73r/otbr-docker/release.yml?logo=github&logoSize=auto&label=AUTO-RELEASE&cacheSeconds=3600)](https://github.com/D34DC3N73R/otbr-docker/releases/)
+[![GHCR Version][ghcr-version-svg]][ghcr]
+
+---
+
 # OpenThread Border Router (OTBR) Docker
 
 This repository provides a lightweight OpenThread Border Router (OTBR) setup, with the REST API enabled. Built from source using `openthread/ot-br-posix`, this image is designed for ease of use in Home Assistant.
@@ -95,3 +100,7 @@ services:
 ## Auto release triggered by `openthread/border-router`
 
   - This repository auto releases a multiarch image which is triggered by `openthread/border-router` image releases so it's always up to date. Works best with recent RCP firmware.
+
+
+[ghcr-version-svg]: https://img.shields.io/github/v/release/D34DC3N73R/otbr-docker?label=LATEST
+[ghcr]: https://github.com/D34DC3N73R/otbr-docker/pkgs/container/otbr-docker
