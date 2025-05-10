@@ -50,7 +50,7 @@ $\hspace{15pt}$`NAT64`: _Enable or disable NAT64 rules (e.g., `1` enabled (defau
 
 ### ⚠️ <ins>**IMPORTANT NOTE**</ins> ⚠️   
 🟠 **The ip6table_filter module is required for the OTBR firewall to function.**  
-🟠 **Sysctl settings are required for Thread to operate correctly, enabling IPv6, forwarding, and proper router advertisement handling.**
+🟠 **Sysctl settings required for Thread to operate correctly, enabling IPv6, forwarding, and proper RA handling.**
 
 ---
 
