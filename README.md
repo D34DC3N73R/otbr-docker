@@ -5,15 +5,15 @@
 
 # OpenThread Border Router (OTBR) Docker
 
-This repository provides a lightweight OpenThread Border Router (OTBR) setup, with the REST API enabled. Built from source using `openthread/ot-br-posix`, this image is designed for ease of use in Home Assistant.
+This repository provides a lightweight OpenThread Border Router (OTBR) setup, with the REST API and Web UI enabled. Built from source using `openthread/ot-br-posix`, this image is designed for ease of use in Home Assistant.
 
 ## Key Features
 
 ### **🪶 <ins>Lightweight Image</ins>**:  
-Image size is approximately 118 MB, making it efficient for deployment on resource-constrained devices. 
+Multi-stage build produces a small image, making it efficient for deployment on resource-constrained devices. 
   
 ### **🤖 <ins>REST API Enabled</ins>**:  
-Includes the REST API with a user-defined port.
+Includes the REST API with a user-defined port, listening on all interfaces for Docker compatibility.
 
 ### **🌐 <ins>Web UI Enabled</ins>**:  
 Enabled with a user-defined port.
@@ -22,7 +22,13 @@ Enabled with a user-defined port.
 Built for `amd64` and `arm64` architectures.
 
 ### **🔒 <ins>Enhanced Firewall</ins>**:  
-Adds bidirectional traffic filtering, allowing secure Thread and LAN communication while restricting unauthorized access.  
+Adds bidirectional traffic filtering with dynamic LAN IPv6 prefix detection, allowing secure Thread and LAN communication while restricting unauthorized access. Can be toggled on/off at runtime.
+
+### **🌍 <ins>NAT64 Translation</ins>**:  
+Built-in NAT64 support using upstream's CIDR-based translator (`192.168.255.0/24`), allowing Thread devices to reach IPv4-only services. Can be toggled on/off at runtime.
+
+### **🔧 <ins>OpenThread mDNS</ins>**:  
+Uses OpenThread's built-in mDNS implementation with DNS-SD Discovery Proxy and SRP Advertising Proxy — no external mDNS daemon required.
 
 ### <ins>**Convenient Environment Variables**</ins>:  
 $\hspace{15pt}$`NETWORK_DEVICE`: _Not tested._  
@@ -34,16 +40,18 @@ $\hspace{15pt}$`THREAD_NET`: _Thread interface (e.g., `wpan0`)._
 $\hspace{15pt}$`WEB_PORT`: _User-defined Web UI port (default `8080`)._  
 $\hspace{15pt}$`REST_PORT`: _User-defined REST API port (default `8081`)._  
 $\hspace{15pt}$`LOG_LEVEL`: _OTBR log level (EMERG:`0` ALERT:`1` CRIT:`2` ERR:`3` WARN:`4` NOTICE:`5` INFO:`6` DEBUG:`7`)._  
-$\hspace{15pt}$`FIREWALL`: _Enable or disable OTBR Firewall rules (e.g., `1` enabled (default), `0` disabled)._  
-$\hspace{15pt}$~`NAT64`: _Enable or disable NAT64 rules (e.g., `1` enabled (default), `0` disabled)._~  
+$\hspace{15pt}$`FIREWALL`: _Enable or disable OTBR Enhanced Firewall (e.g., `1` enabled (default), `0` disabled)._  
+$\hspace{15pt}$`NAT64`: _Enable or disable NAT64 translation rules (e.g., `1` enabled (default), `0` disabled)._  
 
-_* NAT64 disabled due to the removal of the DNS64 feature in ot-br-posix (commit f8aa002f905fc5890d3a6aa0802e2fda6bf18f4b) and a build system dependency that forces OTBR_NAT64_BORDER_ROUTING=ON when OTBR_NAT64=ON, preventing independent control of NAT64 border routing._
+_Upstream `OT_*` environment variables (e.g., `OT_RCP_DEVICE`, `OT_INFRA_IF`, `OT_THREAD_IF`) are also supported as fallbacks._
 
 ## What's Next
 **Coming Soon**:  
 - [x] ~User-defined REST API port.~  
 - [x] ~Web UI enabled with user-defined port.~  
 - [x] ~Environment variables to enable/disable the Firewall and NAT64.~  
+- [x] ~NAT64 re-enabled with upstream's CIDR-based translator.~  
+- [x] ~Switched to OpenThread built-in mDNS (no more mDNSResponder).~  
 - [ ] ???  
 
 ## System Configuration
@@ -95,14 +103,10 @@ services:
       BACKBONE_NET: eth0 # Main Network Interface
       THREAD_NET: wpan0 # Thread Network Interface
       WEB_PORT: 8080 # User-defined Web UI port
-      REST_PORT: 8081 # User Defined REST API PORT
+      REST_PORT: 8081 # User-defined REST API port
       LOG_LEVEL: 3 # emergency=0 alert=1 critical=2 error=3 warning=4 notice=5 info=6 debug=7
       FIREWALL: 1 # Enable OTBR Enhanced Firewall
-      # NAT64 disabled due to the removal of the DNS64 feature in ot-br-posix
-      # (commit f8aa002f905fc5890d3a6aa0802e2fda6bf18f4b) and a build system dependency
-      # that forces OTBR_NAT64_BORDER_ROUTING=ON when OTBR_NAT64=ON, preventing
-      # independent control of NAT64 border routing.
-      #NAT64: 0 # Enable NAT64 rules
+      NAT64: 1 # Enable NAT64 translation
     devices:
       - /dev/ttyUSB0
       - /dev/net/tun

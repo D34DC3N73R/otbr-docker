@@ -1,2 +1,2 @@
-#!/bin/sh
-exit 0
+#!/command/with-contenv bash
+echo "otbr-web ended with exit code ${1} (signal ${2})."

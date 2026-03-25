@@ -1,96 +1,71 @@
-# Copyright (c) 2025, The OpenThread Authors.
-# All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-# 1. Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in the
-#    documentation and/or other materials provided with the distribution.
-# 3. Neither the name of the copyright holder nor the
-#    names of its contributors may be used to endorse or promote products
-#    derived from this software without specific prior written permission.
+#  Copyright (c) 2025, The OpenThread Authors.
+#  All rights reserved.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#  1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#  2. Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in the
+#     documentation and/or other materials provided with the distribution.
+#  3. Neither the name of the copyright holder nor the
+#     names of its contributors may be used to endorse or promote products
+#     derived from this software without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
 
 # Build stage
-FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS builder
+FROM ubuntu:24.04 AS builder
 
 ARG GITHUB_REPO="openthread/ot-br-posix"
 ARG GIT_COMMIT="HEAD"
-ARG TARGETARCH
 
-ENV MDNS_RESPONDER_SOURCE_NAME=mDNSResponder-1790.80.10
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Etc/UTC
-ENV WEB_GUI=1
-ENV REST_API=1
-ENV OTBR_MDNS=mDNSResponder
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /usr/src
 
-# Install build dependencies, including dependencies needed by ot-br-posix's script/bootstrap
-# Removed libavahi-compat-libdnssd-dev to avoid conflicts with mDNSResponder's dns_sd.h
-# Removed libdbus-1-dev since D-Bus is disabled
-RUN apt-get update && \
-    apt-get install -y \
-        build-essential \
-        ca-certificates \
-        cmake \
-        curl \
-        git \
-        libavahi-client-dev \
-        libavahi-common-dev \
-        libavahi-core-dev \
-        libavahi-glib-dev \
-        libmicrohttpd-dev \
-        libprotobuf-dev \
-        libnetfilter-queue-dev \
-        libreadline-dev \
-        libncurses-dev \
-        libjsoncpp-dev \
-        libboost-dev \
-        libssl-dev \
-        libevent-dev \
-        libglib2.0-dev \
-        python3 \
-        ninja-build \
-        pkg-config \
-        protobuf-compiler \
-        wget \
-        lsb-release \
-        sudo \
-        psmisc \
-        avahi-utils && \
-    rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+           build-essential \
+           ca-certificates \
+           cmake \
+           git \
+           libjsoncpp-dev \
+           ninja-build \
+           nodejs \
+           npm \
+           pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
-# Clone ot-br-posix
-RUN git clone --depth 1 -b main "https://github.com/${GITHUB_REPO}.git"
+# Clone ot-br-posix and checkout target commit
+RUN git clone --depth 1 -b main "https://github.com/${GITHUB_REPO}.git" \
+    && cd ot-br-posix \
+    && git fetch origin "${GIT_COMMIT}" \
+    && git checkout "${GIT_COMMIT}" \
+    && git submodule update --depth 1 --init --recursive
 
-# Copy the custom otbr-agent/run script to overwrite the default
+# Copy custom s6 service scripts to override upstream defaults
 COPY s6-overlay/s6-rc.d/otbr-agent/run /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/otbr-agent/run
+COPY s6-overlay/s6-rc.d/otbr-agent/finish /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/otbr-agent/finish
+COPY s6-overlay/s6-rc.d/otbr-web/run /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/otbr-web/run
 
-# Copy the new otbr-web directory
-COPY s6-overlay/s6-rc.d/otbr-web/ /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/otbr-web/
-
-# Copy the user/contents.d/otbr-web file to add otbr-web to user services
-COPY s6-overlay/s6-rc.d/user/contents.d/otbr-web /usr/src/ot-br-posix/etc/docker/border-router/rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/otbr-web
-
-# Create a custom configuration header for Home Assistant optimization
-RUN cat <<EOF > /usr/src/openthread-core-custom-config-posix.h
+# Create custom OpenThread config for Home Assistant optimization
+RUN cat <<'EOF' > /usr/src/openthread-core-custom-config-posix.h
 #ifndef OPENTHREAD_CORE_CUSTOM_CONFIG_POSIX_H_
 #define OPENTHREAD_CORE_CUSTOM_CONFIG_POSIX_H_
 
@@ -100,132 +75,92 @@ RUN cat <<EOF > /usr/src/openthread-core-custom-config-posix.h
 #endif /* OPENTHREAD_CORE_CUSTOM_CONFIG_POSIX_H_ */
 EOF
 
-# Run ot-br-posix's bootstrap script to install dependencies (including Node.js and mDNSResponder)
-RUN cd ot-br-posix && \
-    git fetch origin "${GIT_COMMIT}" && \
-    git checkout "${GIT_COMMIT}" && \
-    git submodule update --depth 1 --init && \
-    ./script/bootstrap || { echo "script/bootstrap failed"; exit 1; }
-
-# Build ot-br-posix with mDNSResponder include and library paths, enable REST API and Web UI
-# Enable NAT64 translator but disable prefix advertisement to prevent default NAT64 prefixes
-RUN mkdir -p ot-br-posix/build/otbr && \
-    cd ot-br-posix && \
-    cmake -S /usr/src/ot-br-posix -B /usr/src/ot-br-posix/build/otbr -GNinja \
-        -DCMAKE_INSTALL_PREFIX=/install/usr \
-        -DBUILD_TESTING=OFF \
-        -DOTBR_BORDER_ROUTING=ON \
-        -DOTBR_BACKBONE_ROUTER=ON \
-        -DOTBR_DBUS=OFF \
-        -DOTBR_MDNS=mDNSResponder \
-        -DOTBR_DNSSD_DISCOVERY_PROXY=ON \
-        -DOTBR_SRP_ADVERTISING_PROXY=ON \
-        -DOTBR_TREL=ON \
-        -DOTBR_NAT64=OFF \
-        -DOT_NAT64_BORDER_ROUTING=OFF \
-        -DOT_FIREWALL=ON \
-        -DOTBR_REST=ON \
-        -DOTBR_WEB=ON \
-        -DOTBR_CLI=ON \
-        -DOT_COAP=OFF \
-        -DOT_COAPS=OFF \
-        -DOT_DNS_CLIENT_OVER_TCP=OFF \
-        -DOT_RCP_RESTORATION_MAX_COUNT=2 \
-        -DOT_CHANNEL_MONITOR=OFF \
-        -DOT_PROJECT_CONFIG="/usr/src/openthread-core-custom-config-posix.h" \
-        -DCMAKE_C_FLAGS="-I/usr/include" \
-        -DCMAKE_CXX_FLAGS="-I/usr/include" \
-        -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib -ldns_sd -Wl,-rpath=/usr/lib" \
-        || { echo "CMake failed"; exit 1; }
-
-# Run ninja to build
-RUN cd ot-br-posix/build/otbr && \
-    ninja || { echo "ninja failed"; exit 1; }
-
-# Run ninja install to install artifacts
-RUN cd ot-br-posix/build/otbr && \
-    ninja install || { echo "ninja install failed"; exit 1; }
+# Build ot-br-posix with OpenThread mDNS, REST API, Web UI, and NAT64
+RUN cd ot-br-posix \
+    && mkdir build && cd build \
+    && cmake -GNinja \
+           -DCMAKE_INSTALL_PREFIX=/usr \
+           -DBUILD_TESTING=OFF \
+           -DOTBR_BORDER_ROUTING=ON \
+           -DOTBR_BACKBONE_ROUTER=ON \
+           -DOTBR_DBUS=OFF \
+           -DOTBR_MDNS=openthread \
+           -DOTBR_DNSSD_DISCOVERY_PROXY=ON \
+           -DOTBR_SRP_ADVERTISING_PROXY=ON \
+           -DOTBR_TREL=ON \
+           -DOT_POSIX_NAT64_CIDR="192.168.255.0/24" \
+           -DOT_FIREWALL=ON \
+           -DOTBR_REST=ON \
+           -DOTBR_WEB=ON \
+           -DOTBR_CLI=ON \
+           -DOT_RCP_RESTORATION_MAX_COUNT=2 \
+           -DOT_PROJECT_CONFIG="/usr/src/openthread-core-custom-config-posix.h" \
+           .. \
+    && ninja \
+    && ninja install
 
 # Runtime stage
 FROM ubuntu:24.04
 
 ARG TARGETARCH
+ARG TARGETVARIANT
 
-ENV S6_OVERLAY_VERSION=3.1.6.2
+ENV S6_OVERLAY_VERSION=3.2.1.0
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Etc/UTC
-ENV INFRA_IF_NAME=eth0
-ENV BORDER_ROUTING=1
-ENV BACKBONE_ROUTER=1
-ENV OT_BACKBONE_CI=0
-ENV OTBR_MDNS=mDNSResponder
-ENV OTBR_OPTIONS=
-ENV PLATFORM=Ubuntu
-ENV REFERENCE_DEVICE=0
-ENV RELEASE=1
-ENV WEB_GUI=1
-ENV REST_API=1
-ENV FIREWALL=1
-ENV OT_SRP_ADV_PROXY=0
-ENV DOCKER=1
-ENV DEVICE=/dev/ttyUSB0
-ENV NETWORK_DEVICE=""
-ENV BAUDRATE=460800
-ENV FLOW_CONTROL=1
-ENV BACKBONE_NET=eth0
-ENV THREAD_NET=wpan0
-ENV LOG_LEVEL=4
-ENV WEB_PORT=8080
-ENV REST_PORT=8081
-ENV NAT64=0
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Copy artifacts from builder stage and set up runtime environment
-RUN --mount=type=bind,source=/,target=/builder,from=builder \
-    mkdir -p /usr/sbin /usr/lib/x86_64-linux-gnu /install/usr/share/otbr-web && \
-    cp -r /builder/install/usr/sbin/* /usr/sbin/ && \
-    cp /builder/usr/sbin/mdnsd /usr/sbin/mdnsd && \
-    cp /builder/usr/lib/libdns_sd.so.1 /usr/lib/x86_64-linux-gnu/libdns_sd.so.1 && \
-    ln -sf libdns_sd.so.1 /usr/lib/x86_64-linux-gnu/libdns_sd.so && \
-    ldconfig && \
-    cp -r /builder/install/usr/share/otbr-web/* /install/usr/share/otbr-web/ && \
-    cp -r /builder/usr/src/ot-br-posix/etc/docker/border-router/rootfs/* / && \
-    echo "#!/bin/sh\nexit 101" > /usr/sbin/policy-rc.d && \
-    chmod +x /usr/sbin/policy-rc.d && \
-    mkdir -p /run/systemd/system && \
-    apt-get update && \
-    apt-get install -y \
-        libavahi-client3 \
-        libavahi-common3 \
-        libmnl0 \
-        libnfnetlink0 \
-        libnss-mdns \
-        libmicrohttpd12 \
-        libprotobuf32 \
-        libjsoncpp25 \
-        libreadline8 \
-        curl \
-        xz-utils \
-        ipset \
-        iproute2 \
-        iptables && \
-    echo -e "# Enable mDNS for the following domains\nlocal\n0.in-addr.arpa\n8.e.f.ip6.arpa\n9.e.f.ip6.arpa\na.e.f.ip6.arpa\nb.e.f.ip6.arpa" > /etc/nss_mdns.conf && \
-    case "${TARGETARCH}" in \
-        amd64) S6_ARCH="x86_64" ;; \
-        arm64) S6_ARCH="aarch64" ;; \
-        *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
-    esac && \
-    curl -L -f -o /tmp/s6-overlay-noarch.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" && \
-    curl -L -f -o /tmp/s6-overlay-${S6_ARCH}.tar.xz "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
-    tar -Jxvf /tmp/s6-overlay-noarch.tar.xz -C / && \
-    tar -Jxvf /tmp/s6-overlay-${S6_ARCH}.tar.xz -C / && \
-    rm -rf /var/lib/apt/lists/* /tmp/s6-overlay-noarch.tar.xz /tmp/s6-overlay-${S6_ARCH}.tar.xz /usr/sbin/policy-rc.d && \
-    chmod +x /etc/s6-overlay/s6-rc.d/otbr-agent/run /etc/s6-overlay/s6-rc.d/otbr-agent/finish /etc/s6-overlay/s6-rc.d/otbr-agent/data/* && \
-    chmod +x /etc/s6-overlay/s6-rc.d/otbr-web/run /etc/s6-overlay/s6-rc.d/otbr-web/finish
+# Install runtime dependencies and s6-overlay
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+           curl \
+           ipset \
+           iproute2 \
+           iptables \
+           libjsoncpp25 \
+    && PLATFORM_SPEC="${TARGETARCH}${TARGETVARIANT:+/$TARGETVARIANT}" \
+    && case "${PLATFORM_SPEC}" in \
+         "amd64") S6_ARCH="x86_64" ;; \
+         "arm64") S6_ARCH="aarch64" ;; \
+         *) echo "Unsupported architecture: ${PLATFORM_SPEC}"; exit 1 ;; \
+       esac \
+    && curl -L -f -s "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" \
+        | tar Jxvf - -C / \
+    && curl -L -f -s "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" \
+        | tar Jxvf - -C / \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Copy built binaries from builder
+COPY --from=builder /usr/sbin/otbr-agent /usr/sbin/
+COPY --from=builder /usr/sbin/otbr-web /usr/sbin/
+COPY --from=builder /usr/sbin/ot-ctl /usr/sbin/
+COPY --from=builder /usr/share/otbr-web/ /usr/share/otbr-web/
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:8081/node/state | grep -Eq '"router"|"leader"' && curl -f http://localhost:${WEB_PORT:-8080}/ || exit 1
+# Copy s6 rootfs (includes our custom overrides applied in builder stage)
+COPY --from=builder /usr/src/ot-br-posix/etc/docker/border-router/rootfs/ /
+
+# Set permissions for s6 service scripts
+RUN chmod +x \
+    /etc/s6-overlay/s6-rc.d/otbr-agent/run \
+    /etc/s6-overlay/s6-rc.d/otbr-agent/finish \
+    /etc/s6-overlay/s6-rc.d/otbr-agent/data/check \
+    /etc/s6-overlay/s6-rc.d/otbr-web/run \
+    /etc/s6-overlay/s6-rc.d/otbr-web/finish
+
+# Default environment variables
+ENV DEVICE=/dev/ttyUSB0 \
+    NETWORK_DEVICE="" \
+    BAUDRATE=460800 \
+    FLOW_CONTROL=1 \
+    BACKBONE_NET=eth0 \
+    THREAD_NET=wpan0 \
+    LOG_LEVEL=4 \
+    WEB_PORT=8080 \
+    REST_PORT=8081 \
+    FIREWALL=1 \
+    NAT64=1
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -sf http://127.0.0.1:${REST_PORT:-8081}/node || exit 1
 
 ENTRYPOINT ["/init"]
