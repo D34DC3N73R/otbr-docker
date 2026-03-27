@@ -118,6 +118,7 @@ RUN apt-get update \
            iproute2 \
            iptables \
            libjsoncpp25 \
+           xz-utils \
     && PLATFORM_SPEC="${TARGETARCH}${TARGETVARIANT:+/$TARGETVARIANT}" \
     && case "${PLATFORM_SPEC}" in \
          "amd64") S6_ARCH="x86_64" ;; \
